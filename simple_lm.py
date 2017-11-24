@@ -15,7 +15,7 @@ import dynet as dy
 MAX_EPOCHS = 20
 BATCH_SIZE = 32
 HIDDEN_DIM = 32
-USE_UNLABELED = True
+USE_UNLABELED = False
 VOCAB_SIZE = 4748
 
 
@@ -93,34 +93,30 @@ if __name__ == '__main__':
     with open(os.path.join('processed', 'train_ix.pkl'), 'rb') as f:
         train_ix = pickle.load(f)
 
+
+    # $@$ Task5 building a new training dataset with labeled and 
+    # unlabeled dataset together
     if USE_UNLABELED:
         with open(os.path.join('processed', 'unlab_ix.pkl'), 'rb') as f:
             unlab_ix = pickle.load(f)
+        train_ix = train_ix + unlab_ix
+        random.shuffle(train_ix)
 
     with open(os.path.join('processed', 'valid_ix.pkl'), 'rb') as f:
         valid_ix = pickle.load(f)
 
-    # $@$ Task5 building a new mixed dataset with labeled and 
-    # unlabeled dataset together
-
-    mix_ix = train_ix + unlab_ix
-    mix_ix = random.shuffle(mix_ix)
     
-    # initialize dynet parameters and learning algorithm
+   # initialize dynet parameters and learning algorithm
     params = dy.ParameterCollection()
     trainer = dy.AdadeltaTrainer(params)
     lm = SimpleNLM(params, vocab_size=VOCAB_SIZE, hidden_dim=HIDDEN_DIM)
-    
-    # $@$ Task5 using label & unlabeled data mixed to train the model
-    # mix_ix replaced with previous train_ix
-    if USE_UNLABELED:
-        train_batches = make_batches(mix_ix, batch_size=BATCH_SIZE)
-    else:
-        train_batches = make_batches(train_ix, batch_size=BATCH_SIZE)
+
+    train_batches = make_batches(train_ix, batch_size=BATCH_SIZE)
     valid_batches = make_batches(valid_ix, batch_size=BATCH_SIZE)
 
     n_train_words = sum(len(sent) for _, sent in train_ix)
     n_valid_words = sum(len(sent) for _, sent in valid_ix)
+    
 
     for it in range(MAX_EPOCHS):
         tic = clock()
