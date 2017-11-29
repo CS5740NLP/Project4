@@ -13,6 +13,12 @@ BATCH_SIZE = 32
 HIDDEN_DIM = 32
 VOCAB_SIZE = 4748 # $@$ Task1 result
 
+# $@$ Task7 specify which pretrained model used in classifier
+# 0 = no pretrained model used
+# 2 = bigram model used
+# 3 = 3-gram model used
+# 4 = 4-gram model used
+MODEL_INDEX = 0
 
 def make_batches(data, batch_size):
     batches = []
@@ -35,6 +41,7 @@ class DANClassifier(object):
         self.vocab_size = vocab_size
         self.hidden_dim = hidden_dim
         self.embed = params.add_lookup_parameters((vocab_size, hidden_dim))
+        
 
         self.W_hid = params.add_parameters((hidden_dim, hidden_dim))
         self.b_hid = params.add_parameters((hidden_dim))
@@ -54,7 +61,6 @@ class DANClassifier(object):
         # predict the probability of positive sentiment for each sentence
         for _, sent in batch:
             sent_embed = [dy.lookup(self.embed, w) for w in sent]
-            
             dropout_embed = []
             # $@$ Task3 implying dropout to regluarization training
             if train == True:
@@ -118,13 +124,30 @@ if __name__ == '__main__':
     with open(os.path.join('processed', 'valid_ix.pkl'), 'rb') as f:
         valid_ix = pickle.load(f)
 
+    with open(os.path.join('processed', 'test_ix.pkl'), 'rb') as f:
+        test_ix = pickle.load(f)
+
     # initialize dynet parameters and learning algorithm
     params = dy.ParameterCollection()
     trainer = dy.AdadeltaTrainer(params)
     clf = DANClassifier(params, vocab_size=VOCAB_SIZE, hidden_dim=HIDDEN_DIM)
+    
+    # $@$ task7 language model reuse in dan classifier
+    if MODEL_INDEX == 2:
+        clf.embed.populate("embeds_baseline_lm_unlabeled", "/embed")
+    elif MODEL_INDEX == 3:
+        clf.embed.populate("embeds_baseline_lm_3gram_unlabeled", "/embed")
+    elif MODEL_INDEX == 4:
+        clf.embed.populate("embeds_baseline_lm_4gram_unlabeled", "/embed")
+    else:
+        pass
+    
 
     train_batches = make_batches(train_ix, BATCH_SIZE)
     valid_batches = make_batches(valid_ix, BATCH_SIZE)
+    test_batches = make_batches(test_ix, BATCH_SIZE)
+
+    print("The MODEL_INDEX = ", MODEL_INDEX)
 
     for it in range(MAX_EPOCHS):
         tic = clock()
@@ -139,21 +162,34 @@ if __name__ == '__main__':
             trainer.update()
             total_loss += loss.value()
 
-        # iterate over all validation batches, accumulate # correct pred.
-        valid_acc = 0
-        for batch in valid_batches:
-            dy.renew_cg()
-            valid_acc += clf.num_correct(batch)
+        # $@$ Task7 commented validation and start to predict test set.
 
-        valid_acc /= len(valid_ix)
+        # iterate over all validation batches, accumulate # correct pred.
+        # valid_acc = 0
+        # for batch in valid_batches:
+        #     dy.renew_cg()
+        #     valid_acc += clf.num_correct(batch)
+
+        # valid_acc /= len(valid_ix)
+
+        # iterate over all validation batches, accumulate # correct pred.
+        test_acc = 0
+        for batch in test_batches:
+            dy.renew_cg()
+            test_acc += clf.num_correct(batch)
+
+        test_acc /= len(test_ix)
 
         toc = clock()
 
         print(("Epoch {:3d} took {:3.1f}s. "
                "Train loss: {:8.5f} "
-               "Valid accuracy: {:8.2f}").format(
+               # "Valid accuracy: {:8.2f}"
+               "Test accuracy: {:8.2f}"
+               ).format(
             it,
             toc - tic,
             total_loss / len(train_ix),
-            valid_acc * 100
+            # valid_acc * 100
+            test_acc * 100
             ))
